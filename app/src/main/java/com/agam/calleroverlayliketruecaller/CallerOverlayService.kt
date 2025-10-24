@@ -28,25 +28,16 @@ class CallerOverlayService : LifecycleService() {
     private var binding: CallerFloatingWindowBinding? = null
     private val windowWidthRatio = 0.9f
 
-    private val windowType: Int
-        get() = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY
-        } else {
-            WindowManager.LayoutParams.TYPE_PHONE
-        }
-
     private var params = WindowManager.LayoutParams(
         /* w = */ WindowManager.LayoutParams.MATCH_PARENT,
         /* h = */ WindowManager.LayoutParams.WRAP_CONTENT,
-        /* _type = */ windowType,
+        /* _type = */ WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
         /* _flags = */
         WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON or
-                WindowManager.LayoutParams.FLAG_SHOW_WHEN_LOCKED or
-                WindowManager.LayoutParams.FLAG_TURN_SCREEN_ON or
+//                WindowManager.LayoutParams.FLAG_SHOW_WHEN_LOCKED or
+//                WindowManager.LayoutParams.FLAG_TURN_SCREEN_ON or
                 WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE,
-//                WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL or
-//                WindowManager.LayoutParams.FLAG_DISMISS_KEYGUARD,
-        /* _format = */ PixelFormat.TRANSLUCENT,
+        /* _format = */ PixelFormat.TRANSPARENT,
     ).apply {
         gravity = Gravity.CENTER
         format = 1
@@ -66,6 +57,16 @@ class CallerOverlayService : LifecycleService() {
             }.run {
                 (windowWidthRatio * widthPixels).toInt()
             }
+            /*// --- API 29 (Q) and below: Use deprecated Display methods ---
+            val display = defaultDisplay
+            val size = android.graphics.Point()
+
+            // Use getSize() to get the width in pixels (width is stored in size.x)
+            @Suppress("DEPRECATION")
+            display?.getSize(size)
+
+            // Apply ratio to the total screen width
+            (windowWidthRatio * size.x).toInt()*/
         }
 
     override fun onCreate() {
@@ -94,7 +95,7 @@ class CallerOverlayService : LifecycleService() {
 
     private fun startForegroundService() {
         val notification = NotificationCompat.Builder(this, "caller_overlay_channel")
-            .setContentTitle("TilesWale Service")
+            .setContentTitle("CallerOverlay Service")
             .setContentText("Detecting caller information")
             .setSmallIcon(R.drawable.ic_launcher_background)
             .setPriority(NotificationCompat.PRIORITY_DEFAULT)
@@ -105,7 +106,6 @@ class CallerOverlayService : LifecycleService() {
     }
 
     private fun showCallerOverlay(userData: User) {
-//        if (binding != null) return
         try {
             windowManager = getSystemService(Context.WINDOW_SERVICE) as WindowManager
             binding?.root?.let {
@@ -139,12 +139,6 @@ class CallerOverlayService : LifecycleService() {
     }
 
     private fun stopThisService() {
-        /*if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-            telephonyManager?.unregisterTelephonyCallback(telephonyCallback!!)
-        } else {
-            telephonyManager?.listen(phoneStateListener, PhoneStateListener.LISTEN_NONE)
-        }*/
-
         stopForeground(Service.STOP_FOREGROUND_REMOVE)
         stopSelf()
     }
