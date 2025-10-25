@@ -18,6 +18,7 @@ import android.widget.Toast
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.ActivityResultLauncher
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.ContextCompat
 import androidx.core.net.toUri
@@ -26,19 +27,12 @@ import androidx.core.view.WindowInsetsCompat
 import com.agam.calleroverlayliketruecaller.databinding.ActivityMainBinding
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import com.google.android.material.snackbar.Snackbar
-import com.karumi.dexter.Dexter
-import com.karumi.dexter.PermissionToken
-import com.karumi.dexter.listener.PermissionDeniedResponse
-import com.karumi.dexter.listener.PermissionGrantedResponse
-import com.karumi.dexter.listener.PermissionRequest
-import com.karumi.dexter.listener.single.PermissionListener
 
 private const val TAG = "MainActivity"
+
 class MainActivity : AppCompatActivity() {
 
     private lateinit var binding: ActivityMainBinding
-    private val ROLE_CALL_SCREENING_PERMISSION = RoleManager.ROLE_CALL_SCREENING
-
 
     private val roleIntentLauncher: ActivityResultLauncher<Intent> = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) {
         autoManageChips()
@@ -165,7 +159,7 @@ You can read our privacy policy for more details on how your data is used.
 
     private fun checkDefaultCallerIdPermission(): Boolean {
         val roleManager: RoleManager = getSystemService(ROLE_SERVICE) as RoleManager
-        val result = roleManager.isRoleAvailable(ROLE_CALL_SCREENING_PERMISSION) && roleManager.isRoleHeld(ROLE_CALL_SCREENING_PERMISSION)
+        val result = roleManager.isRoleAvailable(RoleManager.ROLE_CALL_SCREENING) && roleManager.isRoleHeld(RoleManager.ROLE_CALL_SCREENING)
         binding.switch1.isClickable = !result
         return result
     }
@@ -212,7 +206,7 @@ You can read our privacy policy for more details on how your data is used.
 
     private fun requestRoleCallScreeningPermission() {
         val roleManager: RoleManager = getSystemService(ROLE_SERVICE) as RoleManager
-        roleIntentLauncher.launch(roleManager.createRequestRoleIntent(ROLE_CALL_SCREENING_PERMISSION))
+        roleIntentLauncher.launch(roleManager.createRequestRoleIntent(RoleManager.ROLE_CALL_SCREENING))
     }
 
     private fun requestOverlayPermission() {
@@ -222,33 +216,52 @@ You can read our privacy policy for more details on how your data is used.
         overlayIntentLauncher.launch(overlayIntent)
     }
 
+    private val requestContactPermissionLauncher =
+        registerForActivityResult(ActivityResultContracts.RequestPermission()) { isGranted ->
+            if (isGranted) {
+                Log.d("ContactSyncingHelper", "Permission Granted...")
+                autoManageChips()
+            } else {
+                Log.d("ContactSyncingHelper", "Permission Denied...")
+                Snackbar.make(binding.root, "Permission denied", Snackbar.LENGTH_SHORT)
+                    .setAction("Open Settings") {
+                        val intent = Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS)
+                        val uri = Uri.fromParts("package", packageName, null)
+                        intent.data = uri
+                        startActivity(intent)
+                    }.show()
+                autoManageChips()
+            }
+        }
+
     private fun requestContactPermission() {
-        Dexter.withContext(this)
-            .withPermission(Manifest.permission.READ_CONTACTS)
-            .withListener(object : PermissionListener {
-                override fun onPermissionGranted(p0: PermissionGrantedResponse?) {
-                    Log.d("ContactSyncingHelper", "onPermissionGranted: permission Granted...")
-                    autoManageChips()
-                }
+        when {
+            ContextCompat.checkSelfPermission(
+                this,
+                Manifest.permission.READ_CONTACTS
+            ) == PackageManager.PERMISSION_GRANTED -> {
+                // Already granted
+                Log.d("ContactSyncingHelper", "Permission already granted.")
+                autoManageChips()
+            }
 
-                override fun onPermissionDenied(p0: PermissionDeniedResponse?) {
-                    Log.d("ContactSyncingHelper", "onPermissionGranted: permission permanentlyDenied...")
-                    Snackbar.make(binding.root, "Permission denied", Snackbar.LENGTH_SHORT)
-                        .setAction("Open Settings") {
-                            val intent = Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS)
-                            val uri = Uri.fromParts("package", packageName, null)
-                            intent.data = uri
-                            startActivity(intent)
-                        }.show()
-                    autoManageChips()
-                }
+            shouldShowRequestPermissionRationale(Manifest.permission.READ_CONTACTS) -> {
+                // Show rationale dialog
+                AlertDialog.Builder(this)
+                    .setTitle("Permission Required")
+                    .setMessage("This app needs contact access to show info for saved contacts.")
+                    .setPositiveButton("Allow") { _, _ ->
+                        requestContactPermissionLauncher.launch(Manifest.permission.READ_CONTACTS)
+                    }
+                    .setNegativeButton("Cancel", null)
+                    .show()
+            }
 
-                override fun onPermissionRationaleShouldBeShown(p0: PermissionRequest?, p1: PermissionToken?) {
-                    // Show rational dialog
-                    p1?.continuePermissionRequest()
-                }
-            })
-            .check()
+            else -> {
+                // Request permission directly
+                requestContactPermissionLauncher.launch(Manifest.permission.READ_CONTACTS)
+            }
+        }
     }
 
 }
