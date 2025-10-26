@@ -5,11 +5,11 @@ import android.content.Intent
 import android.provider.Settings
 import android.telecom.Call
 import android.telecom.CallScreeningService
-import android.util.Log
 import androidx.core.content.ContextCompat
 
-private const val TAG = "CallerService"
-
+/**
+ * This service will be called when user get incoming call
+ */
 class CallerScreeningService : CallScreeningService() {
 
     companion object {
@@ -19,7 +19,6 @@ class CallerScreeningService : CallScreeningService() {
     override fun onScreenCall(callDetails: Call.Details) {
         try {
             val phoneNumber = extractPhoneNumber(callDetails)?.filter { it.isDigit() }
-            Log.d(TAG, "onScreenCall: $phoneNumber")
             if (!phoneNumber.isNullOrBlank() && Settings.canDrawOverlays(this)) {
                 startCallerOverlayServiceIfNotRunning(applicationContext, phoneNumber)
             }
@@ -27,12 +26,16 @@ class CallerScreeningService : CallScreeningService() {
             e.printStackTrace()
         }
 
+        /**
+         * CallResponse is used to handle that call like reject, skip etc.
+         */
         val callResponse = CallResponse.Builder()
             .setDisallowCall(false)
             .setRejectCall(false)
             .setSkipCallLog(false)
             .setSkipNotification(false)
             .build()
+
         respondToCall(callDetails, callResponse)
     }
 

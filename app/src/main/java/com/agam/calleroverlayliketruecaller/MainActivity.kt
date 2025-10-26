@@ -1,7 +1,6 @@
 package com.agam.calleroverlayliketruecaller
 
 import android.Manifest
-import android.app.Activity
 import android.app.role.RoleManager
 import android.content.Intent
 import android.content.pm.PackageManager
@@ -12,7 +11,6 @@ import android.text.SpannableStringBuilder
 import android.text.Spanned
 import android.text.method.LinkMovementMethod
 import android.text.style.ClickableSpan
-import android.util.Log
 import android.view.View
 import android.widget.Toast
 import androidx.activity.enableEdgeToEdge
@@ -28,34 +26,41 @@ import com.agam.calleroverlayliketruecaller.databinding.ActivityMainBinding
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import com.google.android.material.snackbar.Snackbar
 
-private const val TAG = "MainActivity"
-
 class MainActivity : AppCompatActivity() {
 
     private lateinit var binding: ActivityMainBinding
 
     private val roleIntentLauncher: ActivityResultLauncher<Intent> = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) {
-        autoManageChips()
-        if (it.resultCode == Activity.RESULT_OK) {
-            Log.d(TAG, "Success requesting ROLE_CALL_SCREENING_PERMISSION!")
-        } else {
-            Log.d(TAG, "Failed requesting ROLE_CALL_SCREENING_PERMISSION")
-
+        if (it.resultCode != RESULT_OK) {
             Snackbar.make(binding.root, "Set default caller ID & spam app from settings.", Snackbar.LENGTH_SHORT)
                 .setAction("Open Settings") {
                     val intent = Intent(Settings.ACTION_MANAGE_DEFAULT_APPS_SETTINGS)
                     startActivity(intent)
                 }.show()
         }
+
+        autoManageChips()
     }
 
     private val overlayIntentLauncher: ActivityResultLauncher<Intent> = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) {
-        if (it.resultCode == Activity.RESULT_OK) {
-            Log.d(TAG, "Success requesting ACTION_MANAGE_OVERLAY_PERMISSION!")
-        } else {
-            Log.d(TAG, "Failed requesting ACTION_MANAGE_OVERLAY_PERMISSION")
+        if (it.resultCode != RESULT_OK) {
             Snackbar.make(binding.root, "Set overlay permission needed for this feature.", Snackbar.LENGTH_SHORT).show()
         }
+
+        autoManageChips()
+    }
+
+    private val requestContactPermissionLauncher = registerForActivityResult(ActivityResultContracts.RequestPermission()) { isGranted ->
+        if (!isGranted) {
+            Snackbar.make(binding.root, "Permission denied", Snackbar.LENGTH_SHORT)
+                .setAction("Open Settings") {
+                    val intent = Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS)
+                    val uri = Uri.fromParts("package", packageName, null)
+                    intent.data = uri
+                    startActivity(intent)
+                }.show()
+        }
+
         autoManageChips()
     }
 
@@ -75,11 +80,19 @@ class MainActivity : AppCompatActivity() {
         initViews()
     }
 
-    private fun initViews() {
-        showPermissionExplanationDialog()
-        setUpTurnOff()
+    override fun onResume() {
+        autoManageChips()
+        super.onResume()
     }
 
+    private fun initViews() {
+        showPermissionExplanationDialog()
+        setUpTurnOffPermissionsWay()
+    }
+
+    /**
+     * To make sure user is aware about why are we asking those dangerous permissions
+     */
     private fun showPermissionExplanationDialog() {
         MaterialAlertDialogBuilder(this)
             .setTitle("Enable Call Screening Feature")
@@ -114,7 +127,10 @@ You can read our privacy policy for more details on how your data is used.
             .show()
     }
 
-    private fun setUpTurnOff() {
+    /**
+     * From here, we redirect user to phone settings, so where user can turn off permissions manually
+     */
+    private fun setUpTurnOffPermissionsWay() {
         val text = "To turn off these options, click here."
         val ssBuilder = SpannableStringBuilder(text)
 
@@ -136,12 +152,9 @@ You can read our privacy policy for more details on how your data is used.
         binding.turnOffTxt.movementMethod = LinkMovementMethod.getInstance()
     }
 
-
-    override fun onResume() {
-        autoManageChips()
-        super.onResume()
-    }
-
+    /**
+     * Auto check/uncheck switches based on user's actions and granted permissions
+     */
     private fun autoManageChips() {
         removeListener()
         binding.switch1.isChecked = checkDefaultCallerIdPermission()
@@ -149,7 +162,6 @@ You can read our privacy policy for more details on how your data is used.
         binding.switch3.isChecked = checkContactsPermission()
         setUpListener()
     }
-
 
     private fun removeListener() {
         binding.switch1.setOnCheckedChangeListener(null)
@@ -175,7 +187,6 @@ You can read our privacy policy for more details on how your data is used.
         binding.switch3.isClickable = !result
         return result
     }
-
 
     private fun setUpListener() {
         binding.switch1.setOnCheckedChangeListener { view, isChecked ->
@@ -216,37 +227,16 @@ You can read our privacy policy for more details on how your data is used.
         overlayIntentLauncher.launch(overlayIntent)
     }
 
-    private val requestContactPermissionLauncher =
-        registerForActivityResult(ActivityResultContracts.RequestPermission()) { isGranted ->
-            if (isGranted) {
-                Log.d("ContactSyncingHelper", "Permission Granted...")
-                autoManageChips()
-            } else {
-                Log.d("ContactSyncingHelper", "Permission Denied...")
-                Snackbar.make(binding.root, "Permission denied", Snackbar.LENGTH_SHORT)
-                    .setAction("Open Settings") {
-                        val intent = Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS)
-                        val uri = Uri.fromParts("package", packageName, null)
-                        intent.data = uri
-                        startActivity(intent)
-                    }.show()
-                autoManageChips()
-            }
-        }
-
     private fun requestContactPermission() {
         when {
             ContextCompat.checkSelfPermission(
                 this,
                 Manifest.permission.READ_CONTACTS
             ) == PackageManager.PERMISSION_GRANTED -> {
-                // Already granted
-                Log.d("ContactSyncingHelper", "Permission already granted.")
                 autoManageChips()
             }
 
             shouldShowRequestPermissionRationale(Manifest.permission.READ_CONTACTS) -> {
-                // Show rationale dialog
                 AlertDialog.Builder(this)
                     .setTitle("Permission Required")
                     .setMessage("This app needs contact access to show info for saved contacts.")
@@ -258,7 +248,6 @@ You can read our privacy policy for more details on how your data is used.
             }
 
             else -> {
-                // Request permission directly
                 requestContactPermissionLauncher.launch(Manifest.permission.READ_CONTACTS)
             }
         }

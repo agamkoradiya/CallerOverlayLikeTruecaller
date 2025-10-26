@@ -4,12 +4,10 @@ import android.annotation.SuppressLint
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.Service
-import android.content.Context
 import android.content.Intent
 import android.graphics.PixelFormat
 import android.os.Build
 import android.util.DisplayMetrics
-import android.util.Log
 import android.view.Gravity
 import android.view.LayoutInflater
 import android.view.MotionEvent
@@ -20,14 +18,16 @@ import androidx.core.app.NotificationCompat
 import androidx.lifecycle.LifecycleService
 import com.agam.calleroverlayliketruecaller.databinding.CallerFloatingWindowBinding
 
-private const val TAG = "CallerService"
-
+/**
+ * We are starting foreground service to fetch data from api or local disk
+ * and showing popup using that data
+ */
 class CallerOverlayService : LifecycleService() {
 
-    private var windowManager: WindowManager? = null
     private var binding: CallerFloatingWindowBinding? = null
-    private val windowWidthRatio = 0.9f
 
+    private var windowManager: WindowManager? = null
+    private val windowWidthRatio = 0.9f // so that it won't touch to the edges of the screen
     private var params = WindowManager.LayoutParams(
         /* w = */ WindowManager.LayoutParams.MATCH_PARENT,
         /* h = */ WindowManager.LayoutParams.WRAP_CONTENT,
@@ -44,7 +44,7 @@ class CallerOverlayService : LifecycleService() {
     }
 
     private var x = 0f
-    private var y = -350f
+    private var y = -350f // Just a random value of Y axis from where popup will start to appear
 
     private val WindowManager.windowWidth: Int
         get() = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
@@ -57,16 +57,6 @@ class CallerOverlayService : LifecycleService() {
             }.run {
                 (windowWidthRatio * widthPixels).toInt()
             }
-            /*// --- API 29 (Q) and below: Use deprecated Display methods ---
-            val display = defaultDisplay
-            val size = android.graphics.Point()
-
-            // Use getSize() to get the width in pixels (width is stored in size.x)
-            @Suppress("DEPRECATION")
-            display?.getSize(size)
-
-            // Apply ratio to the total screen width
-            (windowWidthRatio * size.x).toInt()*/
         }
 
     override fun onCreate() {
@@ -78,19 +68,21 @@ class CallerOverlayService : LifecycleService() {
         super.onStartCommand(intent, flags, startId)
 
         val mobile = intent?.getStringExtra(CallerScreeningService.INCOMING_NUMBER) ?: ""
-        Log.d(TAG, "onStartCommand: $mobile")
 
         startForegroundService()
         processNumber(mobile)
-//        handleCallEndOrDecline()
 
         return START_STICKY
     }
 
-    private fun processNumber(mobile: String) {
-        findUserByNumber(mobile)?.let {
-            showCallerOverlay(it)
-        } ?: stopThisService()
+    private fun createNotificationChannel() {
+        val channel = NotificationChannel(
+            "caller_overlay_channel",
+            "Caller ID Detection",
+            NotificationManager.IMPORTANCE_NONE
+        )
+        val manager = getSystemService(NotificationManager::class.java)
+        manager.createNotificationChannel(channel)
     }
 
     private fun startForegroundService() {
@@ -105,16 +97,23 @@ class CallerOverlayService : LifecycleService() {
         startForeground(1, notification)  // Regular notification, not an overlay
     }
 
+    private fun processNumber(mobile: String) {
+        findUserByNumber(mobile)?.let {
+            showCallerOverlay(it)
+        } ?: stopThisService()
+    }
+
     private fun showCallerOverlay(userData: User) {
         try {
-            windowManager = getSystemService(Context.WINDOW_SERVICE) as WindowManager
+            windowManager = getSystemService(WINDOW_SERVICE) as WindowManager
             binding?.root?.let {
                 windowManager!!.removeView(it)
             }
 
-            val inflater = (getSystemService(Context.LAYOUT_INFLATER_SERVICE) as LayoutInflater)
+            val inflater = (getSystemService(LAYOUT_INFLATER_SERVICE) as LayoutInflater)
             binding = CallerFloatingWindowBinding.inflate(inflater)
             binding?.apply {
+                // Just inflating data to the views
                 params.width = windowManager!!.windowWidth
 
                 nameTxt.text = userData.name
@@ -143,6 +142,9 @@ class CallerOverlayService : LifecycleService() {
         stopSelf()
     }
 
+    /**
+     * Using below logic user can drag our popup view on the screen
+     */
     @SuppressLint("ClickableViewAccessibility")
     private fun setOnTouchListener() {
         binding?.root?.setOnTouchListener { view: View, event: MotionEvent ->
@@ -168,26 +170,16 @@ class CallerOverlayService : LifecycleService() {
         y = event.rawY
     }
 
+    override fun onDestroy() {
+        super.onDestroy()
+        removeOverlay()
+    }
+
     private fun removeOverlay() {
         binding?.let {
             windowManager?.removeView(it.root)
             binding = null
             stopSelf()
         }
-    }
-
-    override fun onDestroy() {
-        super.onDestroy()
-        removeOverlay()
-    }
-
-    private fun createNotificationChannel() {
-        val channel = NotificationChannel(
-            "caller_overlay_channel",
-            "Caller ID Detection",
-            NotificationManager.IMPORTANCE_NONE
-        )
-        val manager = getSystemService(NotificationManager::class.java)
-        manager.createNotificationChannel(channel)
     }
 }
